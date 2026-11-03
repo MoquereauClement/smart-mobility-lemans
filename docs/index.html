@@ -14,6 +14,14 @@
   #alerts.none { border-color: #2c9c4a; background: #f0f8f2; }
   canvas { margin-top: 2rem; }
   #updated { color: #666; font-size: 0.85rem; }
+  #commune-ranking { margin-top: 2rem; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { padding: 0.7rem; border-bottom: 1px solid #ddd; text-align: right; }
+  th { background: #eef6f8; }
+  th:nth-child(2), td:nth-child(2) { text-align: left; }
+  tbody tr:nth-child(even) { background: #f8fafb; }
+  .ranking-note { color: #666; font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -23,8 +31,61 @@
   <div id="alerts">Loading alerts...</div>
   <canvas id="delayChart" height="320"></canvas>
   <p id="updated"></p>
+  <section id="commune-ranking" aria-labelledby="ranking-title">
+    <h2 id="ranking-title">Transport supply by commune</h2>
+    <p>Ranked by scheduled stop-visits per 1,000 residents, from highest to lowest.</p>
+    <p class="ranking-note">Representative weekday schedule. Population is a demand proxy; stops are assigned to the nearest commune center, which can differ from actual boundaries.</p>
+    <p id="ranking-status" role="status">Loading commune ranking...</p>
+    <div class="table-scroll">
+      <table id="ranking-table" aria-labelledby="ranking-title" hidden>
+        <thead><tr>
+          <th scope="col">Rank</th>
+          <th scope="col">Commune</th>
+          <th scope="col">Population</th>
+          <th scope="col">Stops</th>
+          <th scope="col">Scheduled stop-visits</th>
+          <th scope="col">Stop-visits / 1,000 residents</th>
+        </tr></thead>
+        <tbody id="ranking-rows"></tbody>
+      </table>
+    </div>
+  </section>
 
 <script>
+fetch('data/commune_supply.json')
+  .then(response => {
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.json();
+  })
+  .then(communes => {
+    if (!Array.isArray(communes) || communes.length === 0) {
+      throw new Error('No commune ranking available');
+    }
+    const rows = document.getElementById('ranking-rows');
+    communes.sort((a, b) => a.rank - b.rank);
+    communes.forEach(commune => {
+      const row = document.createElement('tr');
+      [commune.rank, commune.commune, commune.population, commune.n_stops,
+        commune.scheduled_stop_visits, commune.stop_visits_per_1000_residents]
+        .forEach((value, index) => {
+          const cell = document.createElement(index === 1 ? 'th' : 'td');
+          if (index === 1) cell.scope = 'row';
+          cell.textContent = typeof value === 'number'
+            ? value.toLocaleString('en-GB', index === 5
+              ? { minimumFractionDigits: 1, maximumFractionDigits: 1 } : {})
+            : value;
+          row.appendChild(cell);
+        });
+      rows.appendChild(row);
+    });
+    document.getElementById('ranking-table').hidden = false;
+    document.getElementById('ranking-status').textContent = '';
+  })
+  .catch(() => {
+    document.getElementById('ranking-status').textContent =
+      'Could not load the commune ranking. Please try again later.';
+  });
+
 fetch('data/current_state.json')
   .then(r => r.json())
   .then(data => {

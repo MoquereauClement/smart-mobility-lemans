@@ -108,6 +108,8 @@ def main():
     freq.to_csv("data/gtfs_static/stops_frequency.csv", index=False)
     ranking = build_supply_reference(freq, communes_df)
     ranking.to_csv("data/gtfs_static/commune_supply.csv", index=False)
+    os.makedirs("docs/data", exist_ok=True)
+    ranking.to_json("docs/data/commune_supply.json", orient="records", indent=2)
     print("Wrote data/gtfs_static/commune_supply.csv (stop-visits per 1,000 residents)")
     routes[["route_id", "route_short_name", "route_long_name", "route_type"]].to_csv(
         "data/gtfs_static/routes.csv", index=False
