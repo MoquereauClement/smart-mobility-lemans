@@ -35,6 +35,29 @@ def nearest_commune(lat, lon, communes):
             best_dist, best_name = d, c["commune"]
     return best_name
 
+def build_supply_reference(freq, communes_df):
+    """Rank every commune, including communes with no scheduled stop-visits."""
+    totals = freq.groupby("nearest_commune").agg(
+        scheduled_stop_visits=("daily_trip_count", "sum"),
+        n_stops=("stop_id", "nunique"),
+    ).reset_index()
+    ranking = communes_df[["commune", "population"]].merge(
+        totals, left_on="commune", right_on="nearest_commune", how="left",
+        validate="one_to_one",
+    ).drop(columns="nearest_commune")
+    for column in ["scheduled_stop_visits", "n_stops"]:
+        ranking[column] = ranking[column].fillna(0).astype(int)
+    if (ranking["population"] <= 0).any():
+        raise ValueError("Commune populations must be positive")
+    ranking["stop_visits_per_1000_residents"] = (
+        ranking["scheduled_stop_visits"] * 1000 / ranking["population"]
+    ).round(1)
+    ranking = ranking.sort_values(
+        ["stop_visits_per_1000_residents", "commune"], ascending=[False, True],
+    ).reset_index(drop=True)
+    ranking.insert(0, "rank", ranking.index + 1)
+    return ranking
+
 def main():
     communes_df = pd.read_csv("data/reference/communes.csv")
     communes = communes_df.to_dict("records")
@@ -83,6 +106,9 @@ def main():
     freq = freq.sort_values("daily_trip_count", ascending=False)
     os.makedirs("data/gtfs_static", exist_ok=True)
     freq.to_csv("data/gtfs_static/stops_frequency.csv", index=False)
+    ranking = build_supply_reference(freq, communes_df)
+    ranking.to_csv("data/gtfs_static/commune_supply.csv", index=False)
+    print("Wrote data/gtfs_static/commune_supply.csv (stop-visits per 1,000 residents)")
     routes[["route_id", "route_short_name", "route_long_name", "route_type"]].to_csv(
         "data/gtfs_static/routes.csv", index=False
     )
